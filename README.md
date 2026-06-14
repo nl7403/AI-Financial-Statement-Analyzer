@@ -5,6 +5,10 @@ A web application that turns raw financial statement figures into a clear, plain
 **Live demo:** http://34.224.41.92
 *(Built for the CUA Vibe Coding Competition. Hosted on AWS EC2 Free Tier.)*
 
+![Integrated Analysis report — insights and ratios](docs/screenshot-1.png)
+
+![Integrated Analysis report — ratios and recommendations](docs/screenshot-2.png)
+
 ---
 
 ## The Problem
