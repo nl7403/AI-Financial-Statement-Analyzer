@@ -1,58 +1,145 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# AI Financial Statement Analyzer
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+A web application that turns raw financial statement figures into a clear, plain-English health report — powered by Anthropic's Claude API.
 
-## About Laravel
+**Live demo:** http://34.224.41.92
+*(Built for the CUA Vibe Coding Competition. Hosted on AWS EC2 Free Tier.)*
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## The Problem
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Small business owners, students, and non-financial managers regularly look at income statements and balance sheets without the training to interpret them. Key ratios like net profit margin, current ratio, and debt-to-equity carry real warning signs — but only if you know how to read them. Hiring an accountant for a quick gut-check is expensive and slow.
 
-## Learning Laravel
+This app closes that gap: you enter the figures from a financial statement, and it returns an accountant-style health report written in language anyone can understand — including the specific ratios, what they mean for *your* numbers, warning signs, and concrete recommendations.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## What It Does
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+- **Multiple statement types** — analyze an Income Statement or a Balance Sheet, with the input form adapting to the statement you choose.
+- **Plain-English health reports** — every report includes:
+  - An overall health rating (e.g. *Healthy / Watch / At Risk*)
+  - Key financial ratios, each with a color-coded value and a one-sentence explanation of what it means for your business
+  - Specific warning signs derived from your actual figures
+  - Actionable recommendations
+- **User accounts** — registration and login (via Laravel Breeze) so analyses are tied to a user.
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
+## How the AI Is Used
 
-## Agentic Development
+The core intelligence is the Anthropic Claude API. When a user submits figures, the app:
 
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+1. Collects and validates the input on the server.
+2. Builds a structured prompt instructing Claude to act as a financial analyst and return a structured health report.
+3. Receives Claude's response, stores it, and renders it as a formatted report.
 
-```bash
-composer require laravel/boost --dev
+The AI does the interpretation — computing and explaining ratios, identifying risks, and tailoring recommendations to the specific numbers entered — rather than relying on hard-coded rules. <!-- TODO: confirm the exact model name you use (check app/Services/AnthropicService.php or your .env) and state it here, e.g. "Model: claude-..." -->
 
-php artisan boost:install
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Backend framework | Laravel (PHP 8.2+) |
+| Authentication | Laravel Breeze |
+| Database | SQLite (file-based, no separate DB server required) |
+| Frontend | Blade templates, Tailwind CSS, Vite |
+| AI | Anthropic Claude API |
+| Hosting | AWS EC2 (Ubuntu 24.04, t2.micro, Free Tier) |
+| Web server | Nginx + PHP-FPM |
+
+## Architecture Overview
+
+```
+User submits financial figures (Blade form)
+        │
+        ▼
+AnalysisController  ──►  validates input
+        │
+        ▼
+AnthropicService    ──►  builds prompt, calls Claude API
+        │
+        ▼
+Analysis model      ──►  stores input + AI report (SQLite)
+        │
+        ▼
+Report view (Blade) ──►  renders the plain-English health report
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Key files:
+- `app/Http/Controllers/AnalysisController.php` — request handling and validation
+- `app/Services/AnthropicService.php` — prompt construction and Claude API calls
+- `app/Models/Analysis.php` — the analysis record
+- `resources/views/analyses/` — the input form and report views
 
-## Contributing
+## Local Setup
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+These steps let you run the project locally with SQLite (no database server needed).
 
-## Code of Conduct
+```bash
+# 1. Clone the repository
+git clone https://github.com/nl7403/AI-Financial-Statement-Analyzer.git
+cd AI-Financial-Statement-Analyzer
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+# 2. Install PHP and JS dependencies
+composer install
+npm install
 
-## Security Vulnerabilities
+# 3. Create your environment file and app key
+cp .env.example .env
+php artisan key:generate
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+# 4. Create the SQLite database file
+#    (On Windows PowerShell, use: New-Item database/database.sqlite)
+touch database/database.sqlite
+
+# 5. In .env, set the database connection:
+#      DB_CONNECTION=sqlite
+#      DB_DATABASE=/absolute/path/to/database/database.sqlite
+#    and add your Anthropic API key:
+#      ANTHROPIC_API_KEY=your-key-here
+
+# 6. Run database migrations
+php artisan migrate
+
+# 7. Build front-end assets
+npm run build
+
+# 8. Start the development server
+php artisan serve
+```
+
+Then visit `http://127.0.0.1:8000`.
+
+### Required environment variable
+
+| Variable | Purpose |
+|----------|---------|
+| `ANTHROPIC_API_KEY` | Your Anthropic API key, used for all AI analysis calls |
+
+## Deployment
+
+The live demo runs on an AWS EC2 Free Tier instance:
+
+- **Ubuntu 24.04** on a `t2.micro` instance
+- **Nginx** serving the app from the `public/` directory, with **PHP-FPM** for PHP processing
+- **SQLite** database stored on the instance (no RDS, to stay within Free Tier)
+- Front-end assets compiled on the server with `npm run build`
+- Cost controls: AWS billing alerts and an Anthropic API spend cap were configured before deployment to prevent surprise charges
+
+## Security Notes
+
+- Secrets (the Anthropic API key, app key) live only in the server's `.env` file, which is excluded from version control via `.gitignore` and never committed.
+- The web server only exposes the `public/` directory; application code, the database file, and configuration sit outside the web root.
+- Analysis features are behind authentication — a user must be registered and logged in to run an analysis.
+
+## Limitations & Disclaimer
+
+This tool provides automated, general-purpose financial commentary for educational and informational purposes. It is **not** professional financial, accounting, or investment advice. AI-generated analysis can be incomplete or wrong, and reports are only as accurate as the figures entered. Users should consult a qualified accountant or financial advisor before making real financial decisions — guidance the app itself repeats in its reports.
+
+## Lessons Learned
+
+- Deploying a Laravel app from scratch on a bare Linux server (Nginx, PHP-FPM, permissions, SQLite write access, Vite asset builds) involves a chain of small, easy-to-miss configuration steps — most "500" errors traced back to file permissions or missing compiled assets rather than the application code.
+- Setting cost guardrails *before* provisioning cloud resources is far less stressful than reacting to a bill.
+- Keeping a clean local → GitHub → server workflow made changes safe to ship and easy to roll back.
 
 ## License
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Released under the MIT License.
