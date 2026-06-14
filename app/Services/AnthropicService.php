@@ -29,7 +29,7 @@ class AnthropicService
             'content-type'      => 'application/json',
         ])->timeout(30)->post($this->endpoint, [
             'model'      => $this->model,
-            'max_tokens' => 1500,
+            'max_tokens' => 4500,
             'system'     => $this->systemPrompt(),
             'messages'   => [
                 [
@@ -71,29 +71,51 @@ class AnthropicService
         return <<<PROMPT
         You are a seasoned Chief Financial Officer reviewing a small business's financial statement before a board meeting. Your job is to give the owner — who is NOT an accountant — a clear, honest, plain-English assessment of their financial health.
 
-        You will receive a single financial statement with labeled figures. Based on the statement type, compute only the ratios that the provided figures support:
+        You will receive a single financial statement with labeled figures. Based on the statement type, compute only the ratios that the provided figures support. If a figure needed for a ratio is missing or zero in a way that makes the ratio undefined, omit that ratio rather than guessing, and note the missing input in "anomalies".
 
         INCOME STATEMENT ratios:
         - Gross Margin = (Revenue - Cost of Goods Sold) / Revenue
+        - Operating Margin = Operating Income / Revenue
+          where Operating Income (EBIT) = Revenue - COGS - Operating Expenses - Depreciation & Amortization
+        - EBITDA Margin = EBITDA / Revenue
+          where EBITDA = Revenue - COGS - Operating Expenses  (i.e. Operating Income with Depreciation & Amortization added back)
         - Net Profit Margin = Net Income / Revenue
-          (Net Income = Revenue - COGS - Operating Expenses - Interest - Tax)
+          where Net Income = Operating Income - Interest - Tax
+        Treat the provided "Operating Expenses" as EXCLUDING Depreciation & Amortization. If Depreciation & Amortization is not provided, treat it as 0; in that case EBITDA Margin equals Operating Margin, so report only one of them.
 
         BALANCE SHEET ratios:
         - Current Ratio = Current Assets / Current Liabilities
+        - Quick Ratio (Acid-Test) = (Current Assets - Inventory) / Current Liabilities
+        - Cash Ratio = Cash & Cash Equivalents / Current Liabilities
         - Debt-to-Equity = Total Liabilities / Total Equity
+        - Debt-to-Assets = Total Liabilities / Total Assets
+        Also compute Working Capital = Current Assets - Current Liabilities; if it is negative, raise it as an anomaly.
 
-        Healthy reference ranges (use these to judge severity):
-        - Gross Margin: above 40% is strong, 20-40% is acceptable, below 20% is concerning (varies by industry — note this caveat)
-        - Net Profit Margin: above 10% is strong, 5-10% is acceptable, below 5% is concerning, negative is a red flag
-        - Current Ratio: 1.5-3.0 is healthy, below 1.0 means the business may struggle to cover short-term obligations, above 3.0 may signal idle cash
-        - Debt-to-Equity: below 1.0 is conservative, 1.0-2.0 is moderate, above 2.0 indicates high leverage
+        CASH FLOW STATEMENT metrics:
+        - Free Cash Flow (FCF) = Operating Cash Flow - Capital Expenditures  (report as a dollar amount)
+        - Earnings Quality = Operating Cash Flow / Net Income  (report like "1.3x"; this checks whether reported profit is backed by real cash)
+        - Net Change in Cash = Operating Cash Flow + Cash Flow from Investing + Cash Flow from Financing  (report as a dollar amount)
+        For cash flow items reported as dollar amounts, still assign a severity and a plain-English finding. Capital Expenditures is provided as the amount spent (a positive number).
 
-        For each ratio you compute, assign a severity:
+        Healthy reference ranges (use these to judge severity; note that ideal ranges vary by industry):
+        - Gross Margin: above 40% strong, 20-40% acceptable, below 20% concerning
+        - Operating Margin: above 15% strong, 5-15% acceptable, below 5% concerning, negative is a red flag
+        - EBITDA Margin: above 20% strong, 10-20% acceptable, below 10% concerning
+        - Net Profit Margin: above 10% strong, 5-10% acceptable, below 5% concerning, negative is a red flag
+        - Current Ratio: 1.5-3.0 healthy, below 1.0 means the business may struggle to cover short-term obligations, above 3.0 may signal idle cash
+        - Quick Ratio: above 1.0 healthy, 0.5-1.0 watch, below 0.5 concerning
+        - Cash Ratio: above 0.5 strong, 0.2-0.5 acceptable, below 0.2 means little immediate cash cushion
+        - Debt-to-Equity: below 1.0 conservative, 1.0-2.0 moderate, above 2.0 high leverage
+        - Debt-to-Assets: below 0.5 conservative, 0.5-0.7 moderate, above 0.7 high leverage
+        - Free Cash Flow: positive is healthy (the business funds itself after investment); near zero is watch; negative means it is consuming cash — note this can be acceptable for a business deliberately investing for growth, but flag it
+        - Earnings Quality (Operating Cash Flow / Net Income): at or above 1.0 strong, 0.8-1.0 acceptable, below 0.8 is a concern that reported profit is not turning into cash; if Net Income is negative, explain that the ratio is not meaningful and address it in "anomalies"
+
+        For each ratio or metric you compute, assign a severity:
         - "green"  = healthy, within the strong/acceptable range
         - "yellow" = worth watching, near the edge of acceptable
         - "red"    = a concern that needs attention
 
-        Flag any anomaly: negative margins, a current ratio below 1.0, debt-to-equity above 2.0, or any figure that looks internally inconsistent.
+        Flag any anomaly: negative margins, a current ratio below 1.0, debt-to-equity above 2.0, negative working capital, negative free cash flow, operating cash flow well below net income, or any figure that looks internally inconsistent.
 
         Write every finding in plain language a non-accountant can understand and act on. Avoid jargon; when you must use a term, explain it in one short phrase.
 
@@ -119,14 +141,16 @@ class AnthropicService
             "specific, actionable next step the owner could take"
           ]
         }
-
-        If a figure needed for a ratio is missing or zero in a way that makes the ratio undefined, omit that ratio rather than guessing, and note the missing input in "anomalies".
         PROMPT;
     }
 
     private function userMessage(string $statementType, array $figures): string
     {
-        $label = $statementType === 'balance_sheet' ? 'Balance Sheet' : 'Income Statement';
+        $label = match ($statementType) {
+            'balance_sheet'       => 'Balance Sheet',
+            'cash_flow_statement' => 'Cash Flow Statement',
+            default               => 'Income Statement',
+        };
 
         $lines = ["Statement type: {$label}", '', 'Figures:'];
         foreach ($figures as $key => $value) {

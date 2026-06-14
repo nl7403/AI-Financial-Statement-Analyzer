@@ -36,17 +36,31 @@ class AnalysisController extends Controller
     public function store(Request $request, AnthropicService $anthropic)
     {
         $validated = $request->validate([
-            'statement_type' => 'required|in:income_statement,balance_sheet',
-            'revenue'             => 'nullable|numeric',
-            'cogs'                => 'nullable|numeric',
-            'operating_expenses'  => 'nullable|numeric',
-            'interest'            => 'nullable|numeric',
-            'tax'                 => 'nullable|numeric',
+            'statement_type' => 'required|in:income_statement,balance_sheet,cash_flow_statement',
+
+            // Income statement figures
+            'revenue'                   => 'nullable|numeric',
+            'cogs'                      => 'nullable|numeric',
+            'operating_expenses'        => 'nullable|numeric',
+            'depreciation_amortization' => 'nullable|numeric',
+            'interest'                  => 'nullable|numeric',
+            'tax'                       => 'nullable|numeric',
+
+            // Balance sheet figures
+            'cash'                => 'nullable|numeric',
+            'inventory'           => 'nullable|numeric',
             'current_assets'      => 'nullable|numeric',
             'total_assets'        => 'nullable|numeric',
             'current_liabilities' => 'nullable|numeric',
             'total_liabilities'   => 'nullable|numeric',
             'equity'              => 'nullable|numeric',
+
+            // Cash flow statement figures
+            'net_income'           => 'nullable|numeric',
+            'operating_cash_flow'  => 'nullable|numeric',
+            'capital_expenditures' => 'nullable|numeric',
+            'investing_cash_flow'  => 'nullable|numeric',
+            'financing_cash_flow'  => 'nullable|numeric',
         ]);
 
         $statementType = $validated['statement_type'];
