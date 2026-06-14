@@ -36,7 +36,7 @@ class AnalysisController extends Controller
     public function store(Request $request, AnthropicService $anthropic)
     {
         $validated = $request->validate([
-            'statement_type' => 'required|in:income_statement,balance_sheet,cash_flow_statement',
+            'statement_type' => 'required|in:income_statement,balance_sheet,cash_flow_statement,integrated',
 
             // Income statement figures
             'revenue'                   => 'nullable|numeric',

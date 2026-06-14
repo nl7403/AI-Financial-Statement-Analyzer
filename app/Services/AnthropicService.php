@@ -27,9 +27,9 @@ class AnthropicService
             'x-api-key'         => $this->apiKey,
             'anthropic-version' => '2023-06-01',
             'content-type'      => 'application/json',
-        ])->timeout(30)->post($this->endpoint, [
+        ])->timeout(45)->post($this->endpoint, [
             'model'      => $this->model,
-            'max_tokens' => 4500,
+            'max_tokens' => 6000,
             'system'     => $this->systemPrompt(),
             'messages'   => [
                 [
@@ -69,19 +69,19 @@ class AnthropicService
     private function systemPrompt(): string
     {
         return <<<PROMPT
-        You are a seasoned Chief Financial Officer reviewing a small business's financial statement before a board meeting. Your job is to give the owner — who is NOT an accountant — a clear, honest, plain-English assessment of their financial health.
+        You are a seasoned Chief Financial Officer reviewing a small business's financials before a board meeting. Your job is to give the owner — who is NOT an accountant — a clear, honest, plain-English assessment of their financial health.
 
-        You will receive a single financial statement with labeled figures. Based on the statement type, compute only the ratios that the provided figures support. If a figure needed for a ratio is missing or zero in a way that makes the ratio undefined, omit that ratio rather than guessing, and note the missing input in "anomalies".
+        You will receive one or more financial statements with labeled figures. Based on what is provided, compute only the ratios that the figures support. If a figure needed for a ratio is missing or zero in a way that makes the ratio undefined, omit that ratio rather than guessing, and note the missing input in "anomalies".
 
         INCOME STATEMENT ratios:
         - Gross Margin = (Revenue - Cost of Goods Sold) / Revenue
         - Operating Margin = Operating Income / Revenue
           where Operating Income (EBIT) = Revenue - COGS - Operating Expenses - Depreciation & Amortization
         - EBITDA Margin = EBITDA / Revenue
-          where EBITDA = Revenue - COGS - Operating Expenses  (i.e. Operating Income with Depreciation & Amortization added back)
+          where EBITDA = Revenue - COGS - Operating Expenses  (Operating Income with Depreciation & Amortization added back)
         - Net Profit Margin = Net Income / Revenue
           where Net Income = Operating Income - Interest - Tax
-        Treat the provided "Operating Expenses" as EXCLUDING Depreciation & Amortization. If Depreciation & Amortization is not provided, treat it as 0; in that case EBITDA Margin equals Operating Margin, so report only one of them.
+        Treat the provided "Operating Expenses" as EXCLUDING Depreciation & Amortization. If Depreciation & Amortization is not provided, treat it as 0; then EBITDA Margin equals Operating Margin, so report only one of them.
 
         BALANCE SHEET ratios:
         - Current Ratio = Current Assets / Current Liabilities
@@ -89,33 +89,40 @@ class AnthropicService
         - Cash Ratio = Cash & Cash Equivalents / Current Liabilities
         - Debt-to-Equity = Total Liabilities / Total Equity
         - Debt-to-Assets = Total Liabilities / Total Assets
-        Also compute Working Capital = Current Assets - Current Liabilities; if it is negative, raise it as an anomaly.
+        Also compute Working Capital = Current Assets - Current Liabilities; if negative, raise it as an anomaly.
 
         CASH FLOW STATEMENT metrics:
         - Free Cash Flow (FCF) = Operating Cash Flow - Capital Expenditures  (report as a dollar amount)
-        - Earnings Quality = Operating Cash Flow / Net Income  (report like "1.3x"; this checks whether reported profit is backed by real cash)
+        - Earnings Quality = Operating Cash Flow / Net Income  (report like "1.3x"; checks whether reported profit is backed by real cash)
         - Net Change in Cash = Operating Cash Flow + Cash Flow from Investing + Cash Flow from Financing  (report as a dollar amount)
-        For cash flow items reported as dollar amounts, still assign a severity and a plain-English finding. Capital Expenditures is provided as the amount spent (a positive number).
+        Capital Expenditures is provided as the amount spent (a positive number).
 
-        Healthy reference ranges (use these to judge severity; note that ideal ranges vary by industry):
+        Healthy reference ranges (judge severity by these; note that ideal ranges vary by industry):
         - Gross Margin: above 40% strong, 20-40% acceptable, below 20% concerning
         - Operating Margin: above 15% strong, 5-15% acceptable, below 5% concerning, negative is a red flag
         - EBITDA Margin: above 20% strong, 10-20% acceptable, below 10% concerning
         - Net Profit Margin: above 10% strong, 5-10% acceptable, below 5% concerning, negative is a red flag
-        - Current Ratio: 1.5-3.0 healthy, below 1.0 means the business may struggle to cover short-term obligations, above 3.0 may signal idle cash
+        - Current Ratio: 1.5-3.0 healthy, below 1.0 the business may struggle to cover short-term obligations, above 3.0 may signal idle cash
         - Quick Ratio: above 1.0 healthy, 0.5-1.0 watch, below 0.5 concerning
-        - Cash Ratio: above 0.5 strong, 0.2-0.5 acceptable, below 0.2 means little immediate cash cushion
+        - Cash Ratio: above 0.5 strong, 0.2-0.5 acceptable, below 0.2 little immediate cash cushion
         - Debt-to-Equity: below 1.0 conservative, 1.0-2.0 moderate, above 2.0 high leverage
         - Debt-to-Assets: below 0.5 conservative, 0.5-0.7 moderate, above 0.7 high leverage
-        - Free Cash Flow: positive is healthy (the business funds itself after investment); near zero is watch; negative means it is consuming cash — note this can be acceptable for a business deliberately investing for growth, but flag it
-        - Earnings Quality (Operating Cash Flow / Net Income): at or above 1.0 strong, 0.8-1.0 acceptable, below 0.8 is a concern that reported profit is not turning into cash; if Net Income is negative, explain that the ratio is not meaningful and address it in "anomalies"
+        - Free Cash Flow: positive is healthy; near zero is watch; negative means it is consuming cash — acceptable for a business deliberately investing for growth, but flag it
+        - Earnings Quality (Operating Cash Flow / Net Income): at or above 1.0 strong, 0.8-1.0 acceptable, below 0.8 a concern that profit is not turning into cash; if Net Income is negative, explain the ratio is not meaningful and address it in "anomalies"
 
-        For each ratio or metric you compute, assign a severity:
-        - "green"  = healthy, within the strong/acceptable range
-        - "yellow" = worth watching, near the edge of acceptable
+        For each ratio or metric, assign a severity:
+        - "green"  = healthy
+        - "yellow" = worth watching
         - "red"    = a concern that needs attention
 
-        Flag any anomaly: negative margins, a current ratio below 1.0, debt-to-equity above 2.0, negative working capital, negative free cash flow, operating cash flow well below net income, or any figure that looks internally inconsistent.
+        INTEGRATED ANALYSIS (only when more than one statement is provided):
+        When figures from multiple statements are present, in addition to all the ratios above, you MUST populate "cross_statement_insights" with observations that only emerge from reading the statements together. Include at minimum these consistency checks:
+        - Balance sheet balancing: verify Total Assets = Total Liabilities + Total Equity. If they do not match, flag the discrepancy and the dollar amount it is off by.
+        - Net income agreement: compare the Net Income implied by the income statement (Revenue - COGS - Operating Expenses - Depreciation & Amortization - Interest - Tax) against the Net Income reported on the cash flow statement. If they differ, flag it and state the gap.
+        Also surface connected insights such as: strong reported profit but weak operating cash flow (earnings-quality concern), profitability paired with negative free cash flow (growth investment vs. cash drain), rising leverage funding cash shortfalls, or healthy margins undermined by poor liquidity. Each insight should connect at least two statements and explain in plain language why it matters.
+        When only a single statement is provided, return "cross_statement_insights" as an empty array.
+
+        Flag any anomaly: negative margins, current ratio below 1.0, debt-to-equity above 2.0, negative working capital, negative free cash flow, operating cash flow well below net income, a balance sheet that does not balance, inconsistent net income across statements, or any figure that looks internally inconsistent.
 
         Write every finding in plain language a non-accountant can understand and act on. Avoid jargon; when you must use a term, explain it in one short phrase.
 
@@ -134,6 +141,13 @@ class AnthropicService
               "finding": "one or two plain-English sentences explaining what this means"
             }
           ],
+          "cross_statement_insights": [
+            {
+              "title": "short label, e.g. 'Profit vs. Cash'",
+              "severity": "green" | "yellow" | "red",
+              "finding": "plain-English insight connecting two or more statements and why it matters"
+            }
+          ],
           "anomalies": [
             "plain-English description of anything that stands out as a warning sign"
           ],
@@ -149,6 +163,7 @@ class AnthropicService
         $label = match ($statementType) {
             'balance_sheet'       => 'Balance Sheet',
             'cash_flow_statement' => 'Cash Flow Statement',
+            'integrated'          => 'Integrated Analysis (all statements provided together)',
             default               => 'Income Statement',
         };
 

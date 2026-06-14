@@ -26,8 +26,9 @@
                             <option value="income_statement" @selected(old('statement_type') === 'income_statement')>Income Statement</option>
                             <option value="balance_sheet" @selected(old('statement_type') === 'balance_sheet')>Balance Sheet</option>
                             <option value="cash_flow_statement" @selected(old('statement_type') === 'cash_flow_statement')>Cash Flow Statement</option>
+                            <option value="integrated" @selected(old('statement_type') === 'integrated')>Integrated Analysis (All Statements)</option>
                         </select>
-                        <p class="text-gray-500 text-sm mt-1">Enter the figures you have. Fields you leave blank are simply skipped.</p>
+                        <p class="text-gray-500 text-sm mt-1">Enter the figures you have. Fields you leave blank are simply skipped. Integrated Analysis reviews all three statements together and cross-references them.</p>
                     </div>
 
                     <div id="income_fields">
@@ -80,10 +81,11 @@
                     };
 
                     function showFields() {
+                        const integrated = (select.value === 'integrated');
                         for (const key in sections) {
-                            const visible = (key === select.value);
+                            const visible = integrated || (key === select.value);
                             sections[key].style.display = visible ? 'block' : 'none';
-                            // Only the visible section's inputs are submitted
+                            // Only inputs in a visible section are submitted
                             sections[key].querySelectorAll('input').forEach(function (input) {
                                 input.disabled = !visible;
                             });
@@ -91,7 +93,7 @@
                     }
 
                     select.addEventListener('change', showFields);
-                    showFields(); // set the correct section on page load
+                    showFields(); // set the correct section(s) on page load
                 </script>
             </div>
         </div>

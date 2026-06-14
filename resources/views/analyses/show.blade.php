@@ -24,6 +24,32 @@
                 <p class="mt-4 text-gray-700">{{ $report['summary'] ?? '' }}</p>
             </div>
 
+            @if (!empty($report['cross_statement_insights']))
+                <div class="bg-white shadow-sm sm:rounded-lg p-6 border-l-4 border-indigo-400">
+                    <h3 class="font-semibold text-lg mb-4">Cross-Statement Insights</h3>
+                    <div class="space-y-4">
+                        @foreach ($report['cross_statement_insights'] as $insight)
+                            @php
+                                $sev = $insight['severity'] ?? 'green';
+                                $dot = match($sev) {
+                                    'green' => 'bg-green-500',
+                                    'yellow' => 'bg-yellow-500',
+                                    'red' => 'bg-red-500',
+                                    default => 'bg-gray-400',
+                                };
+                            @endphp
+                            <div class="border-b pb-3 last:border-0">
+                                <div class="flex items-center gap-2">
+                                    <span class="inline-block w-2.5 h-2.5 rounded-full {{ $dot }}"></span>
+                                    <span class="font-medium">{{ $insight['title'] ?? '' }}</span>
+                                </div>
+                                <p class="text-gray-600 text-sm mt-1">{{ $insight['finding'] ?? '' }}</p>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            @endif
+
             @if (!empty($report['ratios']))
                 <div class="bg-white shadow-sm sm:rounded-lg p-6">
                     <h3 class="font-semibold text-lg mb-4">Key Ratios</h3>
