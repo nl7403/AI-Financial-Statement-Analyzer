@@ -9,29 +9,37 @@ A web application that turns raw financial statement figures into a clear, plain
 
 ## The Problem
 
-Small business owners, students, and non-financial managers regularly look at income statements and balance sheets without the training to interpret them. Key ratios like net profit margin, current ratio, and debt-to-equity carry real warning signs — but only if you know how to read them. Hiring an accountant for a quick gut-check is expensive and slow.
+Small business owners, students, and non-financial managers regularly look at income statements, balance sheets, and cash flow statements without the training to interpret them. Key ratios like net profit margin, current ratio, debt-to-equity, and free cash flow carry real warning signs — but only if you know how to read them. Hiring an accountant for a quick gut-check is expensive and slow.
 
-This app closes that gap: you enter the figures from a financial statement, and it returns an accountant-style health report written in language anyone can understand — including the specific ratios, what they mean for *your* numbers, warning signs, and concrete recommendations.
+This app closes that gap: you enter the figures from your financial statements, and it returns an accountant-style health report written in language anyone can understand — including the specific ratios, what they mean for *your* numbers, warning signs, and concrete recommendations.
 
 ## What It Does
 
-- **Multiple statement types** — analyze an Income Statement or a Balance Sheet, with the input form adapting to the statement you choose.
-- **Plain-English health reports** — every report includes:
-  - An overall health rating (e.g. *Healthy / Watch / At Risk*)
-  - Key financial ratios, each with a color-coded value and a one-sentence explanation of what it means for your business
-  - Specific warning signs derived from your actual figures
-  - Actionable recommendations
-- **User accounts** — registration and login (via Laravel Breeze) so analyses are tied to a user.
+The analyzer offers four modes:
+
+- **Income Statement** — gross, operating, EBITDA, and net profit margins.
+- **Balance Sheet** — current, quick, and cash ratios, debt-to-equity, debt-to-assets, and working capital.
+- **Cash Flow Statement** — free cash flow, net change in cash, and an earnings-quality check (operating cash flow vs. net income).
+- **Integrated Analysis** — reviews all three statements together and adds a dedicated **Cross-Statement Insights** section that connects them, including automatic consistency checks (does the balance sheet balance? does net income agree across the income statement and cash flow statement?).
+
+Every report includes:
+- An overall health rating (*Healthy / Watch / Concern*)
+- Key ratios, each with a color-coded value and a plain-English explanation of what it means for your business
+- Warning signs derived from your actual figures
+- Actionable recommendations
+- For integrated analyses, cross-statement insights that only emerge from reading the statements together (e.g. strong reported profit but weak operating cash flow)
+
+User accounts (via Laravel Breeze) keep each person's analyses tied to their login.
 
 ## How the AI Is Used
 
-The core intelligence is the Anthropic Claude API. When a user submits figures, the app:
+The core intelligence is the Anthropic Claude API (model: **Claude Haiku 4.5**). When a user submits figures, the app:
 
 1. Collects and validates the input on the server.
-2. Builds a structured prompt instructing Claude to act as a financial analyst and return a structured health report.
-3. Receives Claude's response, stores it, and renders it as a formatted report.
+2. Builds a structured prompt instructing Claude to act as a financial analyst, compute the ratios the provided figures support, and — in integrated mode — cross-reference the statements and run consistency checks.
+3. Receives Claude's structured JSON response, stores it, and renders it as a formatted report.
 
-The AI does the interpretation — computing and explaining ratios, identifying risks, and tailoring recommendations to the specific numbers entered — rather than relying on hard-coded rules. <!-- TODO: confirm the exact model name you use (check app/Services/AnthropicService.php or your .env) and state it here, e.g. "Model: claude-..." -->
+The AI does the interpretation — computing and explaining ratios, identifying risks, running cross-statement consistency checks, and tailoring recommendations to the specific numbers entered — rather than relying on hard-coded rules.
 
 ## Tech Stack
 
@@ -41,7 +49,7 @@ The AI does the interpretation — computing and explaining ratios, identifying 
 | Authentication | Laravel Breeze |
 | Database | SQLite (file-based, no separate DB server required) |
 | Frontend | Blade templates, Tailwind CSS, Vite |
-| AI | Anthropic Claude API |
+| AI | Anthropic Claude API (Claude Haiku 4.5) |
 | Hosting | AWS EC2 (Ubuntu 24.04, t2.micro, Free Tier) |
 | Web server | Nginx + PHP-FPM |
 
@@ -49,18 +57,18 @@ The AI does the interpretation — computing and explaining ratios, identifying 
 
 ```
 User submits financial figures (Blade form)
-        │
-        ▼
-AnalysisController  ──►  validates input
-        │
-        ▼
-AnthropicService    ──►  builds prompt, calls Claude API
-        │
-        ▼
-Analysis model      ──►  stores input + AI report (SQLite)
-        │
-        ▼
-Report view (Blade) ──►  renders the plain-English health report
+        |
+        v
+AnalysisController  -->  validates input
+        |
+        v
+AnthropicService    -->  builds prompt, calls Claude API
+        |
+        v
+Analysis model      -->  stores input + AI report (SQLite)
+        |
+        v
+Report view (Blade) -->  renders the plain-English health report
 ```
 
 Key files:
@@ -68,6 +76,8 @@ Key files:
 - `app/Services/AnthropicService.php` — prompt construction and Claude API calls
 - `app/Models/Analysis.php` — the analysis record
 - `resources/views/analyses/` — the input form and report views
+
+Financial figures and the generated report are stored as JSON, so each statement type and the integrated mode share the same flexible schema.
 
 ## Local Setup
 
@@ -137,8 +147,16 @@ This tool provides automated, general-purpose financial commentary for education
 ## Lessons Learned
 
 - Deploying a Laravel app from scratch on a bare Linux server (Nginx, PHP-FPM, permissions, SQLite write access, Vite asset builds) involves a chain of small, easy-to-miss configuration steps — most "500" errors traced back to file permissions or missing compiled assets rather than the application code.
+- Richer AI reports need a higher response token ceiling; the integrated analysis required raising it so the longer output could finish as valid JSON.
+- Hiding form fields with CSS does not stop them from submitting — disabling the inputs of inactive sections was needed so each analysis only receives its own figures.
 - Setting cost guardrails *before* provisioning cloud resources is far less stressful than reacting to a bill.
-- Keeping a clean local → GitHub → server workflow made changes safe to ship and easy to roll back.
+- Keeping a clean local -> GitHub -> server workflow, with git tags marking known-good states, made changes safe to ship and easy to roll back.
+
+## Possible Future Work
+
+- Inventory turnover and interest-coverage ratios (would require a couple of additional inputs).
+- Saving and comparing analyses over time to track trends.
+- Exporting reports to PDF.
 
 ## License
 
